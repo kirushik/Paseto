@@ -95,7 +95,7 @@ defmodule Paseto.Utils do
   def parse_token(token) when is_binary(token) do
     case String.split(token, ".") do
       [version, purpose, payload]
-      when version in ["v1", "v2"] and purpose in ["public", "local"] ->
+      when version in ["v1", "v2", "v3", "v4"] and purpose in ["public", "local"] ->
         {:ok,
          %Paseto.Token{
            version: version,
@@ -105,7 +105,7 @@ defmodule Paseto.Utils do
          }}
 
       [version, purpose, payload, footer]
-      when version in ["v1", "v2"] and purpose in ["public", "local"] ->
+      when version in ["v1", "v2", "v3", "v4"] and purpose in ["public", "local"] ->
         {:ok,
          %Paseto.Token{
            version: version,
