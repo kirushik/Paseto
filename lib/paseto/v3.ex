@@ -75,12 +75,17 @@ defmodule Paseto.V3 do
   end
 
   @doc """
-  Handles decrypting a token given the correct key
+  Handles decrypting a token payload given the correct key.
+
+  Note: This function expects the base64-encoded payload (without the version header),
+  not the full token string. Use `Paseto.Utils.parse_token/1` to extract the payload
+  from a complete token.
 
   # Examples:
       iex> key = :crypto.strong_rand_bytes(32)
       iex> token = Paseto.V3.encrypt("This is a test message", key)
-      iex> Paseto.V3.decrypt(token, key)
+      iex> {:ok, %Paseto.Token{payload: payload}} = Paseto.Utils.parse_token(token)
+      iex> Paseto.V3.decrypt(payload, key)
       {:ok, "This is a test message"}
   """
   @spec decrypt(String.t(), binary, String.t(), String.t()) ::
@@ -317,6 +322,10 @@ defmodule Paseto.V3 do
         # Pad with leading zeros
         padding = :binary.copy(<<0x00>>, target_size - size)
         padding <> bytes
+
+      size ->
+        raise ArgumentError,
+              "Invalid coordinate size: #{size} bytes (expected at most #{target_size + 1} bytes)"
     end
   end
 
@@ -358,5 +367,10 @@ defmodule Paseto.V3 do
   defp compress_public_key(key) when byte_size(key) == 49 do
     # Already compressed
     key
+  end
+
+  defp compress_public_key(key) do
+    raise ArgumentError,
+          "Invalid public key format: expected 97 bytes (uncompressed) or 49 bytes (compressed), got #{byte_size(key)} bytes"
   end
 end

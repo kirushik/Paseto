@@ -77,10 +77,15 @@ defmodule Paseto.V4 do
   @doc """
   Handles decrypting a token payload given the correct key.
 
+  Note: This function expects the base64-encoded payload (without the version header),
+  not the full token string. Use `Paseto.Utils.parse_token/1` to extract the payload
+  from a complete token.
+
   # Examples:
       iex> key = :crypto.strong_rand_bytes(32)
       iex> token = Paseto.V4.encrypt("This is a test message", key)
-      iex> Paseto.V4.decrypt(token, key)
+      iex> {:ok, %Paseto.Token{payload: payload}} = Paseto.Utils.parse_token(token)
+      iex> Paseto.V4.decrypt(payload, key)
       {:ok, "This is a test message"}
   """
   @spec decrypt(String.t(), binary, String.t(), String.t()) ::
@@ -118,7 +123,8 @@ defmodule Paseto.V4 do
   # Examples:
       iex> {:ok, pk, sk} = Salty.Sign.Ed25519.keypair()
       iex> token = Paseto.V4.sign("Test Message", sk)
-      iex> Paseto.V4.verify(token, pk)
+      iex> {:ok, %Paseto.Token{payload: payload}} = Paseto.Utils.parse_token(token)
+      iex> Paseto.V4.verify(payload, pk)
       {:ok, "Test Message"}
   """
   @spec verify(String.t(), binary, String.t(), String.t()) :: {:ok, binary} | {:error, String.t()}
