@@ -2,7 +2,24 @@
 [![CircleCI](https://circleci.com/gh/Ianleeclark/Paseto/tree/master.svg?style=svg)](https://circleci.com/gh/Ianleeclark/Paseto/tree/master)
 [![Hex.pm](https://img.shields.io/hexpm/v/paseto.svg)](https://hex.pm/packages/paseto)
 
-This repository houses an elixir implementation of [Paseto](https://github.com/paragonie/paseto)
+This repository houses an Elixir implementation of [Paseto](https://github.com/paragonie/paseto)
+
+## Supported Versions
+
+This library supports all four PASETO versions. **v4 is recommended for new applications.**
+
+| Version | Purpose | Algorithms |
+|---------|---------|------------|
+| **v4** | local | XChaCha20 + BLAKE2b-MAC |
+| **v4** | public | Ed25519 |
+| **v3** | local | AES-256-CTR + HKDF-SHA384 + HMAC-SHA384 |
+| **v3** | public | ECDSA P-384 + SHA-384 |
+| v2 | local | XChaCha20-Poly1305 |
+| v2 | public | Ed25519 |
+| v1 | local | AES-256-CTR + HMAC-SHA384 |
+| v1 | public | RSA-PSS (2048-bit+) |
+
+Use **v4** for most applications. Use **v3** if you require NIST/FIPS compliance. v1 and v2 are supported for legacy/compatibility purposes.
 
 From the reference implementation of Paseto:
 
@@ -27,14 +44,13 @@ use Paseto in [an insecure way](https://auth0.com/blog/critical-vulnerabilities-
 
 There are a few library/binary requirements required in order for the Paseto 
 library to work on any computer:
-1. Erlang version >= 20.1
+1. Erlang/OTP >= 20.1
     * This is required because this was the first Erlang version to introduce
       crypto:sign/5.
-2. libsodium >= 1.0.13 
-    * This is required for cryptography used in Paseto.
+2. Elixir >= 1.13
+3. libsodium >= 1.0.13 
+    * This is required for cryptography used in Paseto (via [libsalty2](https://github.com/Ianleeclark/libsalty2)).
     * This can be found at https://github.com/jedisct1/libsodium
-3. openssl >= 1.1 
-    * This is needed for XChaCha-Poly1305 used for V2.Local Paseto
 
 ## Want to use this library through Guardian or Plugs?
 
@@ -110,15 +126,30 @@ To learn what each version means, please see [this page in the documentation](ht
 
 ## Using Paseto (in Elixir)
 
-### Generating a token
+### Generating a token (v4 - recommended)
 ```elixir
 iex> {:ok, pk, sk} = Salty.Sign.Ed25519.keypair()
-iex> keypair = {pk, sk}
-iex> token = Paseto.generate_token("v2", "public", "This is a test message", keypair)
-"v2.public.VGhpcyBpcyBhIHRlc3QgbWVzc2FnZSe-sJyD2x_fCDGEUKDcvjU9y3jRHxD4iEJ8iQwwfMUq5jUR47J15uPbgyOmBkQCxNDydR0yV1iBR-GPpyE-NQw"
+iex> token = Paseto.generate_token("v4", "public", "This is a test message", sk)
+"v4.public.VGhpcyBpcyBhIHRlc3QgbWVzc2FnZS..."
 ```
 
-In short, we generate a keypair using [libsalty2](https://github.com/Ianleeclark/libsalty2) (libsodium elixir bindings) and generate the token using that keypair.
+In short, we generate a keypair using [libsalty2](https://github.com/Ianleeclark/libsalty2) (libsodium Elixir bindings) and generate the token using that keypair.
+
+### Using implicit assertions (v3/v4 only)
+
+Versions 3 and 4 support **implicit assertions** — additional authenticated data that is cryptographically bound to the token but NOT stored in it. This is useful for binding tokens to specific contexts (e.g., tenant ID) without including that data in the token itself.
+
+```elixir
+# Generate with implicit assertion
+iex> implicit_assertion = "tenant:acme-corp"
+iex> token = Paseto.generate_token("v4", "public", payload, sk, "", implicit_assertion)
+
+# Must provide the same implicit assertion when verifying
+iex> {:ok, token_data} = Paseto.parse_token(token, pk, implicit_assertion)
+
+# Verification fails with wrong/missing implicit assertion
+iex> {:error, _} = Paseto.parse_token(token, pk, "wrong-assertion")
+```
 
 P.S. If you're confused about how to serialize the above keys, you can use functions
 from the [`Base`](https://hexdocs.pm/elixir/Base.html) module:
@@ -131,16 +162,22 @@ iex> pk |> Base.encode16(case: :lower)
 
 ### Parsing a token
 ```elixir
-iex> token = "v2.public.VGhpcyBpcyBhIHRlc3QgbWVzc2FnZSe-sJyD2x_fCDGEUKDcvjU9y3jRHxD4iEJ8iQwwfMUq5jUR47J15uPbgyOmBkQCxNDydR0yV1iBR-GPpyE-NQw"
-iex> Paseto.parse_token(token, keypair)
+iex> token = "v4.public.VGhpcyBpcyBhIHRlc3QgbWVzc2FnZS..."
+iex> Paseto.parse_token(token, pk)
 {:ok,
   %Paseto.Token{
     footer: nil,
     payload: "This is a test message",
     purpose: "public",
-    version: "v2"
+    version: "v4"
   }}
-"""
+```
+
+### Using a footer (e.g., for key ID)
+```elixir
+iex> footer = ~s({"kid":"key-2024-01"})
+iex> token = Paseto.generate_token("v4", "public", payload, sk, footer)
+iex> {:ok, %Paseto.Token{footer: ^footer}} = Paseto.parse_token(token, pk)
 ```
 
 More info can be found in the [HexDocs][].

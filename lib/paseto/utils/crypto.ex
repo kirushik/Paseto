@@ -91,4 +91,39 @@ defmodule Paseto.Utils.Crypto do
   def hmac_sha384(key, data, trim_bytes) do
     :crypto.macN(:hmac, :sha384, key, data, trim_bytes)
   end
+
+  @doc """
+  XChaCha20 stream cipher encryption (without authentication).
+  Used for v4.local.
+
+  Uses libsodium's native XChaCha20 implementation via libsalty2.
+  """
+  @spec xchacha20_encrypt(binary, binary, binary) :: binary
+  def xchacha20_encrypt(key, plaintext, nonce)
+      when byte_size(key) == 32 and byte_size(nonce) == 24 do
+    {:ok, ciphertext} = Salty.Stream.Xchacha20.xor(plaintext, nonce, key)
+    ciphertext
+  end
+
+  @doc """
+  XChaCha20 stream cipher decryption (without authentication).
+  Used for v4.local.
+
+  Uses libsodium's native XChaCha20 implementation via libsalty2.
+  """
+  @spec xchacha20_decrypt(binary, binary, binary) :: binary
+  def xchacha20_decrypt(key, ciphertext, nonce)
+      when byte_size(key) == 32 and byte_size(nonce) == 24 do
+    {:ok, plaintext} = Salty.Stream.Xchacha20.xor(ciphertext, nonce, key)
+    plaintext
+  end
+
+  @doc """
+  BLAKE2b-MAC for authentication.
+  Used for v4.local.
+  """
+  @spec blake2b_mac(binary, binary, non_neg_integer()) :: binary
+  def blake2b_mac(key, data, output_len \\ 32) do
+    Blake2.hash2b(data, output_len, key)
+  end
 end

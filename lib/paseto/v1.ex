@@ -227,7 +227,8 @@ defmodule Paseto.V1 do
       |> Utils.pre_auth_encode()
       |> (&PasetoCrypto.hmac_sha384(ak, &1)).()
 
-    if calc == mac do
+    # Use constant-time comparison to prevent timing attacks
+    if :crypto.hash_equals(calc, mac) do
       {:ok, PasetoCrypto.aes_256_ctr_decrypt(ek, ciphertext, rightmost)}
     else
       {:error, "Calculated hmac didn't match hmac from token."}
