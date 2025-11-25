@@ -65,7 +65,13 @@ defmodule Paseto.V4 do
   @spec encrypt(String.t(), binary, String.t(), String.t(), binary | nil) ::
           String.t() | {:error, String.t()}
   def encrypt(data, key, footer \\ "", implicit_assertion \\ "", n \\ nil) do
-    aead_encrypt(data, key, footer, implicit_assertion, n || :crypto.strong_rand_bytes(@nonce_len))
+    aead_encrypt(
+      data,
+      key,
+      footer,
+      implicit_assertion,
+      n || :crypto.strong_rand_bytes(@nonce_len)
+    )
   end
 
   @doc """
@@ -102,7 +108,8 @@ defmodule Paseto.V4 do
 
     Utils.b64_encode_token(@header_public, data <> sig, footer)
   rescue
-    _ -> {:error, "Signing failure."}
+    e in ArgumentError -> {:error, "Invalid signing key: #{inspect(e)}"}
+    e -> {:error, "Signing failure: #{inspect(e)}"}
   end
 
   @doc """
@@ -122,12 +129,14 @@ defmodule Paseto.V4 do
     data_size = byte_size(decoded_message) - 64
     <<data::binary-size(data_size), sig::binary-64>> = decoded_message
 
-    pre_auth_encode = Utils.pre_auth_encode([@header_public, data, decoded_footer, implicit_assertion])
+    pre_auth_encode =
+      Utils.pre_auth_encode([@header_public, data, decoded_footer, implicit_assertion])
 
     :ok = Ed25519.verify_detached(sig, pre_auth_encode, public_key)
     {:ok, data}
   rescue
-    _ -> {:error, "Failed to verify signature."}
+    e in ArgumentError -> {:error, "Invalid key or signature format: #{inspect(e)}"}
+    _e -> {:error, "Failed to verify signature."}
   end
 
   @doc """
@@ -181,7 +190,8 @@ defmodule Paseto.V4 do
 
     Utils.b64_encode_token(@header_local, n <> ciphertext <> mac, footer)
   rescue
-    _ -> {:error, "AEAD Encryption failed."}
+    e in ArgumentError -> {:error, "Invalid encryption parameters: #{inspect(e)}"}
+    e -> {:error, "AEAD Encryption failed: #{inspect(e)}"}
   end
 
   @spec aead_decrypt(String.t(), binary, String.t(), String.t()) ::
@@ -192,9 +202,19 @@ defmodule Paseto.V4 do
   end
 
   defp aead_decrypt(data, key, footer, implicit_assertion) when byte_size(key) == @key_len do
-    decoded_payload = b64_decode!(data)
-    decoded_footer = b64_decode!(footer)
+    # Handle base64 decoding with proper error handling
+    with {:ok, decoded_payload} <- Paseto.Utils.b64_decode(data),
+         {:ok, decoded_footer} <- Paseto.Utils.b64_decode(footer) do
+      aead_decrypt_inner(decoded_payload, decoded_footer, key, implicit_assertion)
+    else
+      :error -> {:error, "Failed to decode token payload or footer"}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
+  @spec aead_decrypt_inner(binary, binary, binary, String.t()) ::
+          {:ok, String.t()} | {:error, String.t()}
+  defp aead_decrypt_inner(decoded_payload, decoded_footer, key, implicit_assertion) do
     # Extract nonce (32 bytes), ciphertext, and MAC (32 bytes)
     mac_size = 32
     <<nonce::binary-size(@nonce_len), rest::binary>> = decoded_payload
@@ -208,7 +228,15 @@ defmodule Paseto.V4 do
     ak = Blake2.hash2b("paseto-auth-key-for-aead" <> nonce, 32, key)
 
     # Verify MAC using constant-time comparison
-    pre_auth = Utils.pre_auth_encode([@header_local, nonce, ciphertext, decoded_footer, implicit_assertion])
+    pre_auth =
+      Utils.pre_auth_encode([
+        @header_local,
+        nonce,
+        ciphertext,
+        decoded_footer,
+        implicit_assertion
+      ])
+
     expected_mac = Crypto.blake2b_mac(ak, pre_auth, 32)
 
     if :crypto.hash_equals(expected_mac, mac) do
@@ -218,5 +246,8 @@ defmodule Paseto.V4 do
     else
       {:error, "Authentication tag mismatch"}
     end
+  rescue
+    e in ArgumentError -> {:error, "Invalid token format: #{inspect(e)}"}
+    e -> {:error, "Decryption failed: #{inspect(e)}"}
   end
 end

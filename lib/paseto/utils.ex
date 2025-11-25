@@ -57,7 +57,27 @@ defmodule Paseto.Utils do
       :error
   """
   @spec b64_decode(binary()) :: {:ok, binary()} | :error
-  def b64_decode(input) when is_binary(input), do: Base.url_decode64(input, padding: false)
+  def b64_decode(input) when is_binary(input) do
+    # PASETO uses URL-safe base64 WITHOUT padding
+    # Reject tokens with padding characters
+    if String.contains?(input, "=") do
+      :error
+    else
+      case Base.url_decode64(input, padding: false) do
+        {:ok, decoded} ->
+          # Strict validation: re-encode and verify it matches
+          # This ensures padding bits are zero
+          re_encoded = Base.url_encode64(decoded, padding: false)
+          if re_encoded == input do
+            {:ok, decoded}
+          else
+            :error
+          end
+        :error ->
+          :error
+      end
+    end
+  end
 
   @doc """
   Decode a base64url encoded string (without padding) into a binary string.
@@ -71,10 +91,27 @@ defmodule Paseto.Utils do
       <<206, 158, 75, 219, 56, 182, 139, 177>>
 
       iex> Paseto.Utils.b64_decode!("bad input")
-      ** (ArgumentError) non-alphabet digit found: \" \" (byte 32)
+      ** (ArgumentError) non-alphabet character found: \" \" (byte 32)
   """
   @spec b64_decode!(binary()) :: binary()
-  def b64_decode!(input) when is_binary(input), do: Base.url_decode64!(input, padding: false)
+  def b64_decode!(input) when is_binary(input) do
+    # PASETO uses URL-safe base64 WITHOUT padding
+    # Reject tokens with padding characters
+    if String.contains?(input, "=") do
+      raise ArgumentError, "PASETO tokens must not contain base64 padding"
+    end
+
+    decoded = Base.url_decode64!(input, padding: false)
+
+    # Strict validation: re-encode and verify it matches
+    # This ensures padding bits are zero
+    re_encoded = Base.url_encode64(decoded, padding: false)
+    if re_encoded != input do
+      raise ArgumentError, "Invalid base64 encoding: padding bits must be zero"
+    end
+
+    decoded
+  end
 
   @doc """
   Parse a token into the `Paseto.Token` struct without decrypting/verifying the

@@ -19,13 +19,14 @@ defmodule Paseto.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger, :public_key, :crypto]
     ]
   end
 
   defp deps do
     [
       {:credo, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:hkdf, "~> 0.2.0"},
       {:blake2, "~> 1.0"},
       {:libsalty2, "~> 0.3.0"},

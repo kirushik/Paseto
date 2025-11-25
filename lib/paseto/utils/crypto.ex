@@ -95,21 +95,27 @@ defmodule Paseto.Utils.Crypto do
   @doc """
   XChaCha20 stream cipher encryption (without authentication).
   Used for v4.local.
+
+  Uses libsodium's native XChaCha20 implementation via libsalty2.
   """
   @spec xchacha20_encrypt(binary, binary, binary) :: binary
   def xchacha20_encrypt(key, plaintext, nonce)
       when byte_size(key) == 32 and byte_size(nonce) == 24 do
-    :crypto.crypto_one_time(:chacha20, key, nonce, plaintext, true)
+    {:ok, ciphertext} = Salty.Stream.Xchacha20.xor(plaintext, nonce, key)
+    ciphertext
   end
 
   @doc """
   XChaCha20 stream cipher decryption (without authentication).
   Used for v4.local.
+
+  Uses libsodium's native XChaCha20 implementation via libsalty2.
   """
   @spec xchacha20_decrypt(binary, binary, binary) :: binary
   def xchacha20_decrypt(key, ciphertext, nonce)
       when byte_size(key) == 32 and byte_size(nonce) == 24 do
-    :crypto.crypto_one_time(:chacha20, key, nonce, ciphertext, true)
+    {:ok, plaintext} = Salty.Stream.Xchacha20.xor(ciphertext, nonce, key)
+    plaintext
   end
 
   @doc """

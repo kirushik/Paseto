@@ -1,11 +1,13 @@
 defmodule Paseto.RSAPublicKey do
   @moduledoc false
 
-  import Record
-
-  defrecord :rsa_pk,
-            :RSAPublicKey,
-            Record.extract(:RSAPublicKey, from_lib: "public_key/include/public_key.hrl")
+  # RSA Public Key structure from Erlang's public_key module
+  # Define the record structure directly to avoid from_lib issues with newer Elixir versions
+  require Record
+  Record.defrecord(:rsa_pk, :RSAPublicKey,
+    modulus: nil,
+    publicExponent: nil
+  )
 
   def decode(rsa_pk_pem) do
     [rsa_pk_entry] = :public_key.pem_decode(rsa_pk_pem)
